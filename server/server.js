@@ -2,22 +2,29 @@ require('dotenv').config();
 
 const express = require('express');
 const cors = require('cors');
+const path = require('path');
 const supabase = require('./supabase');
 
 const app = express();
 
+// ==========================================
+// CONFIGURACIÓN
+// ==========================================
+
 app.use(cors());
 app.use(express.json());
-app.use(express.static('public'));
+
+// Servir archivos de la carpeta public
+app.use(express.static(path.join(__dirname, '../public')));
 
 // ==========================================
 // RUTA PRINCIPAL
 // ==========================================
 
+// Mostrar directamente la página del escáner QR
 app.get('/', (req, res) => {
-  res.send('Servidor de asistencia funcionando correctamente 🚀');
+  res.sendFile(path.join(__dirname, '../public/prueba.html'));
 });
-
 
 // ==========================================
 // OBTENER INTEGRANTES
@@ -25,24 +32,35 @@ app.get('/', (req, res) => {
 
 app.get('/integrantes', async (req, res) => {
 
-  const { data, error } = await supabase
-    .from('Integrantes')
-    .select('*');
+  try {
 
-  if (error) {
+    const { data, error } = await supabase
+      .from('Integrantes')
+      .select('*');
 
-    console.error('Error de Supabase:', error);
+    if (error) {
 
-    return res.status(500).json({
-      error: error.message
+      console.error('Error de Supabase:', error);
+
+      return res.status(500).json({
+        error: error.message
+      });
+
+    }
+
+    res.json(data);
+
+  } catch (error) {
+
+    console.error('Error:', error);
+
+    res.status(500).json({
+      error: 'Error interno del servidor'
     });
 
   }
 
-  res.json(data);
-
 });
-
 
 // ==========================================
 // REGISTRAR ASISTENCIA
@@ -54,7 +72,10 @@ app.post('/api/asistencia', async (req, res) => {
 
     const { qr_codigo } = req.body;
 
-    // Verificar que recibimos el QR
+    // ==========================================
+    // VERIFICAR QR
+    // ==========================================
+
     if (!qr_codigo) {
 
       return res.status(400).json({
@@ -63,22 +84,32 @@ app.post('/api/asistencia', async (req, res) => {
 
     }
 
+    console.log('QR recibido:', qr_codigo);
 
     // ==========================================
     // BUSCAR INTEGRANTE
     // ==========================================
 
-    const { data: integrante, error: errorIntegrante } =
-      await supabase
-        .from('Integrantes')
-        .select('*')
-        .eq('qr_codigo', qr_codigo)
-        .eq('activo', true)
-        .single();
+    const {
+      data: integrante,
+      error: errorIntegrante
+    } = await supabase
+      .from('Integrantes')
+      .select('*')
+      .eq('qr_codigo', qr_codigo)
+      .eq('activo', true)
+      .single();
 
+    // ==========================================
+    // VERIFICAR INTEGRANTE
+    // ==========================================
 
-    // Si no encontramos al integrante
     if (errorIntegrante || !integrante) {
+
+      console.error(
+        'Integrante no encontrado:',
+        errorIntegrante
+      );
 
       return res.status(404).json({
         error: 'Integrante no encontrado o inactivo'
@@ -86,25 +117,28 @@ app.post('/api/asistencia', async (req, res) => {
 
     }
 
-
     // ==========================================
     // REGISTRAR ASISTENCIA
     // ==========================================
 
-    const { data: asistencia, error: errorAsistencia } =
-      await supabase
-        .from('Asistencia')
-        .insert([
-          {
-            integrante_id: integrante.id,
-            tipo: 'entrada'
-          }
-        ])
-        .select()
-        .single();
+    const {
+      data: asistencia,
+      error: errorAsistencia
+    } = await supabase
+      .from('Asistencia')
+      .insert([
+        {
+          integrante_id: integrante.id,
+          tipo: 'entrada'
+        }
+      ])
+      .select()
+      .single();
 
+    // ==========================================
+    // VERIFICAR REGISTRO
+    // ==========================================
 
-    // Verificar error de registro
     if (errorAsistencia) {
 
       console.error(
@@ -118,10 +152,14 @@ app.post('/api/asistencia', async (req, res) => {
 
     }
 
-
     // ==========================================
     // RESPUESTA
     // ==========================================
+
+    console.log(
+      'Asistencia registrada:',
+      integrante.nombre
+    );
 
     res.json({
 
@@ -139,7 +177,7 @@ app.post('/api/asistencia', async (req, res) => {
 
   } catch (error) {
 
-    console.error('Error:', error);
+    console.error('Error interno:', error);
 
     res.status(500).json({
       error: 'Error interno del servidor'
@@ -149,13 +187,9 @@ app.post('/api/asistencia', async (req, res) => {
 
 });
 
-
 // ==========================================
 // INICIAR SERVIDOR
 // ==========================================
-
-// Render proporcionará PORT.
-// Cuando trabajemos localmente utilizará 3000.
 
 const PORT = process.env.PORT || 3000;
 
