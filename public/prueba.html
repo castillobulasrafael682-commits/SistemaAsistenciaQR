@@ -10,10 +10,7 @@
         content="width=device-width, initial-scale=1.0"
     >
 
-    <title>Registro de Asistencia Liturgia Altepexi</title>
-
-
-    <!-- LECTOR QR -->
+    <title>Registro de Asistencia Litúrgica Altepexi</title>
 
     <script
         src="https://unpkg.com/html5-qrcode"
@@ -57,8 +54,6 @@
         }
 
 
-        /* CONTENEDOR PRINCIPAL */
-
         .contenedor {
 
             width: 100%;
@@ -79,8 +74,6 @@
 
         }
 
-
-        /* ENCABEZADO */
 
         .encabezado {
 
@@ -166,6 +159,18 @@
         }
 
 
+        /* PUNTO VERDE CUANDO LA CÁMARA ESTÁ LISTA */
+
+        .punto.lista {
+
+            background: #20b15a;
+
+            box-shadow:
+                0 0 0 3px rgba(32, 177, 90, 0.15);
+
+        }
+
+
         /* ESCÁNER */
 
         #reader {
@@ -190,6 +195,38 @@
         }
 
 
+        /* OCULTAR ELEMENTOS DEL ESCÁNER */
+
+        #reader__dashboard_section_csr {
+
+            display: none !important;
+
+        }
+
+
+        #reader__dashboard {
+
+            padding: 0 !important;
+
+        }
+
+
+        #reader__scan_region {
+
+            border-radius: 18px;
+
+            overflow: hidden;
+
+        }
+
+
+        #reader__scan_region img {
+
+            display: none !important;
+
+        }
+
+
         /* RESULTADO */
 
         #resultado {
@@ -209,8 +246,6 @@
         }
 
 
-        /* ESPERANDO */
-
         .esperando {
 
             background: #f1f4f8;
@@ -219,8 +254,6 @@
 
         }
 
-
-        /* ÉXITO */
 
         .exito {
 
@@ -233,8 +266,6 @@
         }
 
 
-        /* ERROR */
-
         .error {
 
             background: #fdecec;
@@ -245,8 +276,6 @@
 
         }
 
-
-        /* DUPLICADO */
 
         .duplicado {
 
@@ -259,8 +288,6 @@
         }
 
 
-        /* NOMBRE */
-
         .dato {
 
             margin-top: 7px;
@@ -271,8 +298,6 @@
 
         }
 
-
-        /* PIE DE PÁGINA */
 
         .pie {
 
@@ -288,8 +313,6 @@
 
         }
 
-
-        /* CELULAR */
 
         @media (max-width: 480px) {
 
@@ -339,45 +362,38 @@
 
         <div class="encabezado">
 
-
             <div class="icono">
-
                 ⛪
-
             </div>
 
 
             <h1>
-
                 Registro de Asistencia Litúrgica Altepexi
-
             </h1>
 
 
             <p class="subtitulo">
-
                 Escanea tu código QR para registrar tu asistencia
-
             </p>
 
 
             <div class="estado">
 
-                <span class="punto"></span>
+                <span
+                    class="punto"
+                    id="puntoCamara">
+                </span>
 
                 <span id="textoEstado">
-
                     Cámara iniciando...
-
                 </span>
 
             </div>
 
-
         </div>
 
 
-        <!-- ESCÁNER QR -->
+        <!-- ESCÁNER -->
 
         <div id="reader"></div>
 
@@ -388,9 +404,7 @@
             id="resultado"
             class="esperando"
         >
-
             📷 Esperando código QR...
-
         </div>
 
 
@@ -403,7 +417,6 @@
 
         </div>
 
-
     </div>
 
 
@@ -411,10 +424,12 @@
 
 
         // =====================================================
-        // VARIABLE PARA EVITAR DOBLE ESCANEO INMEDIATO
+        // VARIABLES
         // =====================================================
 
         let procesando = false;
+
+        let scanner = null;
 
 
 
@@ -499,7 +514,7 @@
 
 
         // =====================================================
-        // OBTENER FECHA Y HORA DE MÉXICO
+        // FECHA Y HORA DE MÉXICO
         // =====================================================
 
         function obtenerFechaMexico(
@@ -575,9 +590,6 @@
         ) {
 
 
-            // Evita procesar el mismo QR varias veces
-            // mientras se está registrando.
-
             if (procesando) {
 
                 return;
@@ -602,13 +614,8 @@
                 '⏳ Registrando asistencia...';
 
 
-
             try {
 
-
-                // =================================================
-                // ENVIAR QR AL SERVIDOR
-                // =================================================
 
                 const respuesta =
                     await fetch(
@@ -640,14 +647,13 @@
                     );
 
 
-
                 const datos =
                     await respuesta.json();
 
 
 
                 // =================================================
-                // ASISTENCIA DUPLICADA
+                // DUPLICADO
                 // =================================================
 
                 if (
@@ -688,9 +694,6 @@
 
                         horario.horaMexico;
 
-
-
-                    // Volver a permitir escaneos
 
                     setTimeout(
                         () => {
@@ -736,7 +739,6 @@
                             datos.error ||
                             'No se pudo registrar la asistencia'
                         );
-
 
 
                     setTimeout(
@@ -804,11 +806,6 @@
                     horario.horaMexico;
 
 
-
-                // =================================================
-                // REGRESAR AL ESTADO NORMAL
-                // =================================================
-
                 setTimeout(
                     () => {
 
@@ -828,7 +825,6 @@
                 );
 
 
-
             }
 
             catch (error) {
@@ -845,7 +841,6 @@
 
                 resultado.innerHTML =
                     '❌ No se pudo conectar con el servidor';
-
 
 
                 setTimeout(
@@ -881,7 +876,6 @@
             decodedResult
         ) {
 
-
             console.log(
                 'QR detectado:',
                 decodedText
@@ -897,95 +891,225 @@
 
 
         // =====================================================
-        // CONFIGURACIÓN DEL ESCÁNER
+        // INICIAR CÁMARA TRASERA AUTOMÁTICAMENTE
         // =====================================================
 
-        const scanner =
-            new Html5QrcodeScanner(
-
-                'reader',
-
-                {
-
-                    fps:
-                        10,
-
-                    qrbox:
-                        {
-
-                            width:
-                                250,
-
-                            height:
-                                250
-
-                        },
-
-                    rememberLastUsedCamera:
-                        true,
-
-                    supportedScanTypes:
-                        [
-
-                            Html5QrcodeScanType
-                                .SCAN_TYPE_CAMERA
-
-                        ]
-
-                },
-
-                false
-
-            );
+        async function iniciarCamara() {
 
 
-
-        // =====================================================
-        // INICIAR ESCÁNER
-        // =====================================================
-
-        scanner.render(
-
-            qrDetectado,
-
-            (errorMessage) => {
-
-                console.log(
-                    'Escáner:',
-                    errorMessage
+            const textoEstado =
+                document.getElementById(
+                    'textoEstado'
                 );
 
-            }
 
-        );
-
-
-
-        // =====================================================
-        // ESTADO DE CÁMARA
-        // =====================================================
-
-        setTimeout(
-            () => {
+            const puntoCamara =
+                document.getElementById(
+                    'puntoCamara'
+                );
 
 
-                const textoEstado =
-                    document.getElementById(
-                        'textoEstado'
+            try {
+
+
+                textoEstado.textContent =
+                    'Solicitando cámara...';
+
+
+
+                // Obtener cámaras disponibles
+
+                const camaras =
+                    await Html5Qrcode.getCameras();
+
+
+
+                if (
+                    !camaras ||
+                    camaras.length === 0
+                ) {
+
+                    throw new Error(
+                        'No se encontró ninguna cámara'
                     );
-
-
-                if (textoEstado) {
-
-                    textoEstado.textContent =
-                        'Cámara lista para escanear';
 
                 }
 
 
-            },
-            2500
-        );
+
+                // =================================================
+                // BUSCAR CÁMARA TRASERA
+                // =================================================
+
+                let camaraTrasera =
+                    camaras.find(
+                        camara => {
+
+                            const nombre =
+                                (
+                                    camara.label ||
+                                    ''
+                                ).toLowerCase();
+
+
+                            return (
+
+                                nombre.includes(
+                                    'back'
+                                ) ||
+
+                                nombre.includes(
+                                    'rear'
+                                ) ||
+
+                                nombre.includes(
+                                    'trasera'
+                                ) ||
+
+                                nombre.includes(
+                                    'environment'
+                                )
+
+                            );
+
+                        }
+                    );
+
+
+
+                // Si no encuentra una cámara identificada
+                // como trasera, usar la última disponible.
+
+                const cameraId =
+                    camaraTrasera
+                        ? camaraTrasera.id
+                        : camaras[
+                            camaras.length - 1
+                        ].id;
+
+
+
+                console.log(
+                    'Cámara seleccionada:',
+                    camaraTrasera
+                        ? camaraTrasera.label
+                        : 'Cámara disponible'
+                );
+
+
+
+                // =================================================
+                // CREAR LECTOR
+                // =================================================
+
+                scanner =
+                    new Html5Qrcode(
+                        'reader'
+                    );
+
+
+
+                // =================================================
+                // INICIAR ESCÁNER
+                // =================================================
+
+                await scanner.start(
+
+                    cameraId,
+
+                    {
+
+                        fps:
+                            10,
+
+                        qrbox:
+                            {
+
+                                width:
+                                    250,
+
+                                height:
+                                    250
+
+                            }
+
+                    },
+
+                    qrDetectado,
+
+                    (errorMessage) => {
+
+                        // Errores normales de lectura QR.
+                        // No mostrar al usuario.
+
+                    }
+
+                );
+
+
+
+                // =================================================
+                // CÁMARA LISTA
+                // =================================================
+
+                textoEstado.textContent =
+                    'Cámara lista para escanear';
+
+
+                puntoCamara.classList.add(
+                    'lista'
+                );
+
+
+                console.log(
+                    'Cámara iniciada correctamente'
+                );
+
+
+            }
+
+            catch (error) {
+
+
+                console.error(
+                    'Error iniciando cámara:',
+                    error
+                );
+
+
+                textoEstado.textContent =
+                    'No se pudo iniciar la cámara';
+
+
+                puntoCamara.classList.remove(
+                    'lista'
+                );
+
+
+                const resultado =
+                    document.getElementById(
+                        'resultado'
+                    );
+
+
+                resultado.className =
+                    'error';
+
+
+                resultado.innerHTML =
+                    '❌ Permite el acceso a la cámara para escanear códigos QR.';
+
+            }
+
+        }
+
+
+
+        // =====================================================
+        // INICIAR AUTOMÁTICAMENTE
+        // =====================================================
+
+        iniciarCamara();
 
 
     </script>
