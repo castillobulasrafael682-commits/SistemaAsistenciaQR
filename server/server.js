@@ -1,70 +1,75 @@
 require('dotenv').config();
 
+const path = require('path');
 const express = require('express');
 const cors = require('cors');
-const path = require('path');
 const supabase = require('./supabase');
 
 const app = express();
 
-// ==========================================
-// CONFIGURACIÓN
-// ==========================================
-
 app.use(cors());
 app.use(express.json());
 
-// Servir archivos de la carpeta public
+// Servir la página pública
 app.use(express.static(path.join(__dirname, '../public')));
 
-// ==========================================
-// RUTA PRINCIPAL
-// ==========================================
-
-// Mostrar directamente la página del escáner QR
+// Página principal
 app.get('/', (req, res) => {
   res.sendFile(path.join(__dirname, '../public/prueba.html'));
 });
 
-// ==========================================
-// OBTENER INTEGRANTES
-// ==========================================
-
+// Obtener integrantes
 app.get('/integrantes', async (req, res) => {
+  const { data, error } = await supabase
+    .from('Integrantes')
+    .select('*');
 
-  try {
+  if (error) {
+    console.error('Error de Supabase:', error);
 
-    const { data, error } = await supabase
-      .from('Integrantes')
-      .select('*');
-
-    if (error) {
-
-      console.error('Error de Supabase:', error);
-
-      return res.status(500).json({
-        error: error.message
-      });
-
-    }
-
-    res.json(data);
-
-  } catch (error) {
-
-    console.error('Error:', error);
-
-    res.status(500).json({
-      error: 'Error interno del servidor'
+    return res.status(500).json({
+      error: error.message
     });
-
   }
 
+  res.json(data);
 });
 
-// ==========================================
+// =====================================================
+// FUNCIÓN PARA ENVIAR MENSAJES A TELEGRAM
+// =====================================================
+
+async function enviarTelegram(mensaje) {
+
+  const url = `https://api.telegram.org/bot${process.env.TELEGRAM_BOT_TOKEN}/sendMessage`;
+
+  const respuesta = await fetch(url, {
+    method: 'POST',
+
+    headers: {
+      'Content-Type': 'application/json'
+    },
+
+    body: JSON.stringify({
+      chat_id: process.env.TELEGRAM_CHAT_ID,
+      text: mensaje
+    })
+  });
+
+  const datos = await respuesta.json();
+
+  if (!respuesta.ok || !datos.ok) {
+    throw new Error(
+      datos.description || 'Error enviando mensaje a Telegram'
+    );
+  }
+
+  return datos;
+}
+
+// =====================================================
 // REGISTRAR ASISTENCIA
-// ==========================================
+// =====================================================
 
 app.post('/api/asistencia', async (req, res) => {
 
@@ -72,10 +77,7 @@ app.post('/api/asistencia', async (req, res) => {
 
     const { qr_codigo } = req.body;
 
-    // ==========================================
-    // VERIFICAR QR
-    // ==========================================
-
+    // Verificar que llegó el QR
     if (!qr_codigo) {
 
       return res.status(400).json({
@@ -86,24 +88,16 @@ app.post('/api/asistencia', async (req, res) => {
 
     console.log('QR recibido:', qr_codigo);
 
-    // ==========================================
-    // BUSCAR INTEGRANTE
-    // ==========================================
+    // Buscar integrante
+    const { data: integrante, error: errorIntegrante } =
+      await supabase
+        .from('Integrantes')
+        .select('*')
+        .eq('qr_codigo', qr_codigo)
+        .eq('activo', true)
+        .single();
 
-    const {
-      data: integrante,
-      error: errorIntegrante
-    } = await supabase
-      .from('Integrantes')
-      .select('*')
-      .eq('qr_codigo', qr_codigo)
-      .eq('activo', true)
-      .single();
-
-    // ==========================================
-    // VERIFICAR INTEGRANTE
-    // ==========================================
-
+    // Si no existe
     if (errorIntegrante || !integrante) {
 
       console.error(
@@ -117,28 +111,25 @@ app.post('/api/asistencia', async (req, res) => {
 
     }
 
-    // ==========================================
-    // REGISTRAR ASISTENCIA
-    // ==========================================
+    console.log(
+      'Integrante encontrado:',
+      integrante.nombre
+    );
 
-    const {
-      data: asistencia,
-      error: errorAsistencia
-    } = await supabase
-      .from('Asistencia')
-      .insert([
-        {
-          integrante_id: integrante.id,
-          tipo: 'entrada'
-        }
-      ])
-      .select()
-      .single();
+    // Registrar asistencia en Supabase
+    const { data: asistencia, error: errorAsistencia } =
+      await supabase
+        .from('Asistencia')
+        .insert([
+          {
+            integrante_id: integrante.id,
+            tipo: 'entrada'
+          }
+        ])
+        .select()
+        .single();
 
-    // ==========================================
-    // VERIFICAR REGISTRO
-    // ==========================================
-
+    // Error al guardar asistencia
     if (errorAsistencia) {
 
       console.error(
@@ -152,14 +143,73 @@ app.post('/api/asistencia', async (req, res) => {
 
     }
 
-    // ==========================================
-    // RESPUESTA
-    // ==========================================
-
     console.log(
       'Asistencia registrada:',
-      integrante.nombre
+      asistencia.id
     );
+
+    // =================================================
+    // FECHA Y HORA DE MÉXICO
+    // =================================================
+
+    const fecha = new Date(asistencia.registrado_en);
+
+    const fechaMexico =
+      fecha.toLocaleDateString('es-MX', {
+        timeZone: 'America/Mexico_City',
+        day: '2-digit',
+        month: '2-digit',
+        year: 'numeric'
+      });
+
+    const horaMexico =
+      fecha.toLocaleTimeString('en-US', {
+        timeZone: 'America/Mexico_City',
+        hour: 'numeric',
+        minute: '2-digit',
+        hour12: true
+      });
+
+    // =================================================
+    // MENSAJE DE TELEGRAM
+    // =================================================
+
+    const mensajeTelegram =
+
+`📋 NUEVA ASISTENCIA
+
+👤 Integrante: ${integrante.nombre}
+🔢 Número: ${integrante.numero_integrante}
+📅 Fecha: ${fechaMexico}
+🕐 Hora: ${horaMexico}
+
+✅ Entrada registrada`;
+
+    // =================================================
+    // ENVIAR TELEGRAM
+    // =================================================
+
+    try {
+
+      await enviarTelegram(mensajeTelegram);
+
+      console.log(
+        'Mensaje enviado correctamente a Telegram'
+      );
+
+    } catch (errorTelegram) {
+
+      // Si Telegram falla, NO eliminamos la asistencia
+      console.error(
+        'Error enviando Telegram:',
+        errorTelegram.message
+      );
+
+    }
+
+    // =================================================
+    // RESPUESTA AL CELULAR
+    // =================================================
 
     res.json({
 
@@ -177,7 +227,10 @@ app.post('/api/asistencia', async (req, res) => {
 
   } catch (error) {
 
-    console.error('Error interno:', error);
+    console.error(
+      'Error interno:',
+      error
+    );
 
     res.status(500).json({
       error: 'Error interno del servidor'
@@ -187,9 +240,9 @@ app.post('/api/asistencia', async (req, res) => {
 
 });
 
-// ==========================================
+// =====================================================
 // INICIAR SERVIDOR
-// ==========================================
+// =====================================================
 
 const PORT = process.env.PORT || 3000;
 
